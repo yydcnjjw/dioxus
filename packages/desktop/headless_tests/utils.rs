@@ -4,7 +4,7 @@ use dioxus::prelude::*;
 use dioxus_core::Element;
 
 pub fn check_app_exits(app: fn() -> Element) {
-    use dioxus_desktop::tao::window::WindowBuilder;
+    use dioxus_desktop::winit::window::WindowBuilder;
     use dioxus_desktop::Config;
     // This is a deadman's switch to ensure that the app exits
     let should_panic = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));

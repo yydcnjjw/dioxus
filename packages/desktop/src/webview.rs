@@ -2,9 +2,14 @@ use crate::file_upload::{DesktopFileData, DesktopFileDragEvent};
 use crate::menubar::DioxusMenu;
 use crate::PendingDesktopContext;
 use crate::{
-    app::SharedContext, assets::AssetHandlerRegistry, edits::WryQueue,
-    file_upload::NativeFileHover, ipc::UserWindowEvent, protocol, waker::tao_waker, Config,
-    DesktopContext, DesktopService,
+    app::SharedContext,
+    assets::AssetHandlerRegistry,
+    edits::WryQueue,
+    file_upload::NativeFileHover,
+    ipc::UserWindowEvent,
+    protocol,
+    waker::winit_waker,
+    Config, DesktopContext, DesktopService,
 };
 use crate::{document::DesktopDocument, WeakDesktopContext};
 use crate::{element::DesktopElement, file_upload::DesktopFormData};
@@ -18,6 +23,7 @@ use futures_util::{pin_mut, FutureExt};
 use std::sync::{atomic::AtomicBool, Arc};
 use std::{cell::OnceCell, time::Duration};
 use std::{rc::Rc, task::Waker};
+use winit::window::Window;
 use wry::{DragDropEvent, RequestAsyncResponder, WebContext, WebViewBuilder, WebViewId};
 
 #[derive(Clone)]
@@ -214,41 +220,12 @@ pub(crate) struct WebviewInstance {
 }
 
 impl WebviewInstance {
-    pub(crate) fn new(
+    pub(crate) fn from_window(
+        window: Arc<Window>,
         mut cfg: Config,
-        mut dom: VirtualDom,
+        dom: VirtualDom,
         shared: Rc<SharedContext>,
     ) -> WebviewInstance {
-        let mut window = cfg.window.clone();
-
-        // tao makes small windows for some reason, make them bigger on desktop
-        //
-        // on mobile, we want them to be `None` so tao makes them the size of the screen. Otherwise we
-        // get a window that is not the size of the screen and weird black bars.
-        #[cfg(not(any(target_os = "ios", target_os = "android")))]
-        {
-            if cfg.window.window.inner_size.is_none() {
-                window = window.with_inner_size(tao::dpi::LogicalSize::new(800.0, 600.0));
-            }
-        }
-
-        // We assume that if the icon is None in cfg, then the user just didnt set it
-        if cfg.window.window.window_icon.is_none() {
-            window = window.with_window_icon(Some(
-                tao::window::Icon::from_rgba(
-                    include_bytes!("./assets/default_icon.bin").to_vec(),
-                    460,
-                    460,
-                )
-                .expect("image parse failed"),
-            ));
-        }
-
-        let window = Arc::new(window.build(&shared.target).unwrap());
-        if let Some(on_build) = cfg.on_window.as_mut() {
-            on_build(window.clone(), &mut dom);
-        }
-
         // https://developer.apple.com/documentation/appkit/nswindowcollectionbehavior/nswindowcollectionbehaviormanaged
         #[cfg(target_os = "macos")]
         #[allow(deprecated)]
@@ -256,7 +233,7 @@ impl WebviewInstance {
             use cocoa::appkit::NSWindowCollectionBehavior;
             use cocoa::base::id;
             use objc::{msg_send, sel, sel_impl};
-            use tao::platform::macos::WindowExtMacOS;
+            use winit::platform::macos::WindowExtMacOS;
 
             unsafe {
                 let window: id = window.ns_window() as id;
@@ -270,7 +247,7 @@ impl WebviewInstance {
         let asset_handlers = AssetHandlerRegistry::new();
         let edits = WebviewEdits::new(dom.runtime(), edit_queue.clone());
         let file_hover = NativeFileHover::default();
-        let headless = !cfg.window.window.visible;
+        let headless = !cfg.window.visible;
 
         let request_handler = {
             to_owned![
@@ -359,7 +336,7 @@ impl WebviewInstance {
                     window.inner_size().height,
                 )),
             })
-            .with_transparent(cfg.window.window.transparent)
+            .with_transparent(cfg.window.transparent)
             .with_url("dioxus://index.html/")
             .with_ipc_handler(ipc_handler)
             .with_navigation_handler(move |var| {
@@ -486,7 +463,7 @@ impl WebviewInstance {
             target_os = "android"
         )))]
         let webview = {
-            use tao::platform::unix::WindowExtUnix;
+            use winit::platform::unix::WindowExtUnix;
             use wry::WebViewBuilderExtUnix;
             let vbox = window.default_vbox().unwrap();
             webview.build_gtk(vbox)
@@ -518,11 +495,42 @@ impl WebviewInstance {
         WebviewInstance {
             dom,
             edits,
-            waker: tao_waker(shared.proxy.clone(), desktop_context.window.id()),
+            waker: winit_waker(shared.proxy.clone(), desktop_context.window.id()),
             desktop_context,
             _menu: menu,
             _web_context: web_context,
         }
+    }
+
+    pub(crate) fn new(cfg: Config, dom: VirtualDom, shared: Rc<SharedContext>) -> WebviewInstance {
+        let mut window = cfg.window.clone();
+
+        // winit makes small windows for some reason, make them bigger on desktop
+        //
+        // on mobile, we want them to be `None` so winit makes them the size of the screen. Otherwise we
+        // get a window that is not the size of the screen and weird black bars.
+        #[cfg(not(any(target_os = "ios", target_os = "android")))]
+        {
+            if cfg.window.inner_size.is_none() {
+                window = window.with_inner_size(winit::dpi::LogicalSize::new(800.0, 600.0));
+            }
+        }
+
+        // We assume that if the icon is None in cfg, then the user just didnt set it
+        if cfg.window.window_icon.is_none() {
+            window = window.with_window_icon(Some(
+                winit::window::Icon::from_rgba(
+                    include_bytes!("./assets/default_icon.bin").to_vec(),
+                    460,
+                    460,
+                )
+                .expect("image parse failed"),
+            ));
+        }
+        let event_loop = unsafe { &*shared.event_loop.borrow().unwrap() };
+
+        let window = event_loop.create_window(window).unwrap();
+        return Self::from_window(Arc::new(window), cfg, dom, shared);
     }
 
     pub fn poll_vdom(&mut self) {
@@ -637,18 +645,45 @@ pub(crate) struct PendingWebview {
     dom: VirtualDom,
     cfg: Config,
     sender: futures_channel::oneshot::Sender<DesktopContext>,
+    window: Option<Arc<Window>>,
 }
 
 impl PendingWebview {
     pub(crate) fn new(dom: VirtualDom, cfg: Config) -> (Self, PendingDesktopContext) {
         let (sender, receiver) = futures_channel::oneshot::channel();
-        let webview = Self { dom, cfg, sender };
+        let webview = Self {
+            dom,
+            cfg,
+            sender,
+            window: None,
+        };
+        let pending = PendingDesktopContext { receiver };
+        (webview, pending)
+    }
+
+    pub(crate) fn from_window(
+        dom: VirtualDom,
+        cfg: Config,
+        window: Arc<Window>,
+    ) -> (Self, PendingDesktopContext) {
+        let (sender, receiver) = futures_channel::oneshot::channel();
+        let webview = Self {
+            dom,
+            cfg,
+            sender,
+            window: Some(window),
+        };
         let pending = PendingDesktopContext { receiver };
         (webview, pending)
     }
 
     pub(crate) fn create_window(self, shared: &Rc<SharedContext>) -> WebviewInstance {
-        let window = WebviewInstance::new(self.cfg, self.dom, shared.clone());
+        let window = match self.window {
+            Some(window) => {
+                WebviewInstance::from_window(window, self.cfg, self.dom, shared.clone())
+            }
+            None => WebviewInstance::new(self.cfg, self.dom, shared.clone()),
+        };
 
         let cx = window
             .dom

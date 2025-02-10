@@ -2,6 +2,7 @@ use crate::{AppBuilder, BuildArgs, BuildId, BuildMode, BuildRequest, BundleForma
 use anyhow::{bail, Context};
 use path_absolutize::Absolutize;
 use std::collections::HashMap;
+use target_lexicon::OperatingSystem;
 use tauri_bundler::{BundleBinary, BundleSettings, PackageSettings, SettingsBuilder};
 
 use walkdir::WalkDir;
@@ -159,9 +160,10 @@ impl Bundle {
 
         let package = krate.package();
         let mut name: PathBuf = krate.executable_name().into();
-        if cfg!(windows) {
+        if matches!(build.triple.operating_system, OperatingSystem::Windows) {
             name.set_extension("exe");
         }
+
         std::fs::create_dir_all(krate.bundle_dir(build.bundle))
             .context("Failed to create bundle directory")?;
         std::fs::copy(&exe, krate.bundle_dir(build.bundle).join(&name))

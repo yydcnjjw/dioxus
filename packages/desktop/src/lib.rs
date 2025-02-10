@@ -32,11 +32,11 @@ mod mobile_shortcut;
 /// The main entrypoint for this crate
 pub mod launch;
 
-// Reexport tao and wry, might want to re-export other important things
-pub use tao;
-pub use tao::dpi::{LogicalPosition, LogicalSize};
-pub use tao::event::WindowEvent;
-pub use tao::window::WindowBuilder;
+// Reexport winit and wry, might want to re-export other important things
+pub use winit;
+pub use winit::dpi::{LogicalPosition, LogicalSize};
+pub use winit::event::WindowEvent;
+pub use winit::window::WindowAttributes;
 pub use wry;
 // Reexport muda only if we are on desktop platforms that support menus
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
@@ -56,3 +56,4 @@ pub use event_handlers::WryEventHandler;
 pub use hooks::*;
 pub use shortcut::{HotKeyState, ShortcutHandle, ShortcutRegistryError};
 pub use wry::RequestAsyncResponder;
+pub use ipc::UserWindowEvent;

@@ -858,7 +858,7 @@ impl AppBuilder {
         tracing::debug!("Opening app with main exe: {main_exe:?}");
 
         let mut child = Command::new(main_exe)
-            .args(args)
+            // .args(args)
             .envs(envs)
             .stderr(Stdio::piped())
             .stdout(Stdio::piped())

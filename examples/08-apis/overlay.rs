@@ -6,7 +6,7 @@
 //! We also add a global shortcut to toggle the overlay on and off, so you could build a raycast-type app with this.
 
 use dioxus::desktop::{
-    HotKeyState, LogicalSize, WindowBuilder, tao::dpi::PhysicalPosition, use_global_shortcut,
+    winit::dpi::PhysicalPosition, use_global_shortcut, HotKeyState, LogicalSize, WindowBuilder,
 };
 use dioxus::prelude::*;
 

@@ -150,7 +150,7 @@ pub async fn run(mut vdom: VirtualDom, ws: impl LiveViewSocket) -> Result<(), Li
     }
 
     // desktop uses this wrapper struct thing around the actual event itself
-    // this is sorta driven by tao/wry
+    // this is sorta driven by winit/wry
     #[derive(serde::Deserialize, Debug)]
     #[serde(tag = "method", content = "params")]
     enum IpcMessage {

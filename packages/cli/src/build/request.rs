@@ -2798,7 +2798,7 @@ impl BuildRequest {
 
         // Make sure to set all the crazy android flags. Cross-compiling is hard, man.
         if self.bundle == BundleFormat::Android {
-            env_vars.extend(self.android_env_vars()?);
+            // env_vars.extend(self.android_env_vars()?);
         };
 
         // If this is a release build, bake the base path and title into the binary with env vars.
@@ -3070,15 +3070,15 @@ impl BuildRequest {
             // Their setup is really annoying and requires us to hardcode `dx` to specific versions of tao/wry.
             (
                 "WRY_ANDROID_PACKAGE".to_string(),
-                "dev.dioxus.main".to_string().into(),
+                std::env::var_os("WRY_ANDROID_PACKAGE").unwrap_or("dev.dioxus.main".to_string().into()),
             ),
             (
                 "WRY_ANDROID_LIBRARY".to_string(),
-                "dioxusmain".to_string().into(),
+                std::env::var_os("WRY_ANDROID_LIBRARY").unwrap_or("dioxusmain".to_string().into()),
             ),
             (
                 "WRY_ANDROID_KOTLIN_FILES_OUT_DIR".to_string(),
-                self.wry_android_kotlin_files_out_dir().into_os_string(),
+                std::env::var_os("WRY_ANDROID_KOTLIN_FILES_OUT_DIR").unwrap_or(self.wry_android_kotlin_files_out_dir().into_os_string()),
             ),
             // Found this through a comment related to bindgen using the wrong clang for cross compiles
             //
@@ -4361,6 +4361,7 @@ __wbg_init({{module_or_path: "/{}/{wasm_path}"}}).then((wasm) => {{
     ///
     /// This might include codesigning, zipping, creating an appimage, etc
     async fn assemble(&self, ctx: &BuildContext) -> Result<()> {
+        return Ok(());
         if let BundleFormat::Android = self.bundle {
             ctx.status_running_gradle();
 

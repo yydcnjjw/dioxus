@@ -16,15 +16,15 @@ use std::{
     rc::{Rc, Weak},
     sync::Arc,
 };
-use tao::{
+use winit::{
     event::Event,
-    event_loop::EventLoopWindowTarget,
+    event_loop::ActiveEventLoop,
     window::{Fullscreen as WryFullscreen, Window, WindowId},
 };
 use wry::{RequestAsyncResponder, WebView};
 
 #[cfg(target_os = "ios")]
-use tao::platform::ios::WindowExtIOS;
+use winit::platform::ios::WindowExtIOS;
 
 /// Get an imperative handle to the current window without using a hook
 ///
@@ -39,7 +39,7 @@ pub fn window() -> DesktopContext {
 pub type DesktopContext = Rc<DesktopService>;
 
 /// A weak handle to the [`DesktopService`] to ensure safe passing.
-/// The problem without this is that the tao window is never dropped and therefore cannot be closed.
+/// The problem without this is that the winit window is never dropped and therefore cannot be closed.
 /// This was due to the Rc that had still references because of multiple copies when creating a webview.
 pub type WeakDesktopContext = Weak<DesktopService>;
 
@@ -56,10 +56,10 @@ pub type WeakDesktopContext = Weak<DesktopService>;
 ///     let desktop = cx.consume_context::<DesktopContext>().unwrap();
 /// ```
 pub struct DesktopService {
-    /// The wry/tao proxy to the current window
+    /// The wry/winit proxy to the current window
     pub webview: WebView,
 
-    /// The tao window itself
+    /// The winit window itself
     pub window: Arc<Window>,
 
     pub(crate) shared: Rc<SharedContext>,
@@ -140,6 +140,25 @@ impl DesktopService {
     // - https://github.com/DioxusLabs/dioxus/issues/3080
     pub fn new_window(&self, dom: VirtualDom, cfg: Config) -> PendingDesktopContext {
         let (window, context) = PendingWebview::new(dom, cfg);
+
+        self.shared
+            .proxy
+            .send_event(UserWindowEvent::NewWindow)
+            .unwrap();
+
+        self.shared.pending_webviews.borrow_mut().push(window);
+
+        context
+    }
+
+    #[allow(missing_docs)]
+    pub fn new_from_window(
+        &self,
+        dom: VirtualDom,
+        cfg: Config,
+        window: Arc<Window>,
+    ) -> PendingDesktopContext {
+        let (window, context) = PendingWebview::from_window(dom, cfg, window);
 
         self.shared
             .proxy
@@ -232,7 +251,7 @@ impl DesktopService {
     /// The id this function returns can be used to remove the event handler with [`Self::remove_wry_event_handler`]
     pub fn create_wry_event_handler(
         &self,
-        handler: impl FnMut(&Event<UserWindowEvent>, &EventLoopWindowTarget<UserWindowEvent>) + 'static,
+        handler: impl FnMut(&Event<UserWindowEvent>, &ActiveEventLoop) + 'static,
     ) -> WryEventHandler {
         self.shared.event_handlers.add(self.window.id(), handler)
     }
@@ -244,7 +263,7 @@ impl DesktopService {
 
     /// Create a global shortcut
     ///
-    /// Linux: Only works on x11. See [this issue](https://github.com/tauri-apps/tao/issues/331) for more information.
+    /// Linux: Only works on x11. See [this issue](https://github.com/tauri-apps/winit/issues/331) for more information.
     pub fn create_shortcut(
         &self,
         hotkey: HotKey,

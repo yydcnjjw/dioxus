@@ -1,7 +1,7 @@
 use crate::{ipc::UserWindowEvent, window};
 use slab::Slab;
 use std::cell::RefCell;
-use tao::{event::Event, event_loop::EventLoopWindowTarget, window::WindowId};
+use winit::{event::Event, event_loop::ActiveEventLoop, window::WindowId};
 
 /// The unique identifier of a window event handler. This can be used to later remove the handler.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -14,24 +14,30 @@ impl WryEventHandler {
     }
 }
 
-#[derive(Default)]
 pub struct WindowEventHandlers {
     handlers: RefCell<Slab<WryWindowEventHandlerInner>>,
+}
+
+impl Default for WindowEventHandlers {
+    fn default() -> Self {
+        Self {
+            handlers: Default::default(),
+        }
+    }
 }
 
 struct WryWindowEventHandlerInner {
     window_id: WindowId,
 
     #[allow(clippy::type_complexity)]
-    handler:
-        Box<dyn FnMut(&Event<UserWindowEvent>, &EventLoopWindowTarget<UserWindowEvent>) + 'static>,
+    handler: Box<dyn FnMut(&Event<UserWindowEvent>, &ActiveEventLoop) + 'static>,
 }
 
 impl WindowEventHandlers {
     pub(crate) fn add(
         &self,
         window_id: WindowId,
-        handler: impl FnMut(&Event<UserWindowEvent>, &EventLoopWindowTarget<UserWindowEvent>) + 'static,
+        handler: impl FnMut(&Event<UserWindowEvent>, &ActiveEventLoop) + 'static,
     ) -> WryEventHandler {
         WryEventHandler(
             self.handlers
@@ -47,11 +53,7 @@ impl WindowEventHandlers {
         self.handlers.borrow_mut().try_remove(id.0);
     }
 
-    pub fn apply_event(
-        &self,
-        event: &Event<UserWindowEvent>,
-        target: &EventLoopWindowTarget<UserWindowEvent>,
-    ) {
+    pub fn apply_event(&self, event: &Event<UserWindowEvent>, target: &ActiveEventLoop) {
         for (_, handler) in self.handlers.borrow_mut().iter_mut() {
             // Avoid interacting with the runtime while something else is using it
             #[cfg(target_os = "android")]

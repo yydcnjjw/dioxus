@@ -1,4 +1,4 @@
-use tao::window::Window;
+use winit::window::Window;
 
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
 pub type DioxusMenu = muda::Menu;
@@ -15,7 +15,7 @@ pub fn init_menu_bar(menu: &DioxusMenu, window: &Window) {
 }
 
 /// Creates a standard menu bar depending on the users platform. It may be used as a starting point
-/// to further customize the menu bar and pass it to a [`WindowBuilder`](tao::window::WindowBuilder).
+/// to further customize the menu bar and pass it to a [`WindowBuilder`](winit::window::WindowBuilder).
 /// > Note: The default menu bar enables macOS shortcuts like cut/copy/paste.
 /// > The menu bar differs per platform because of constraints introduced
 /// > by [`MenuItem`](muda::MenuItem).
@@ -36,20 +36,26 @@ mod desktop_platforms {
     pub fn init_menu_bar(menu: &Menu, window: &Window) {
         #[cfg(target_os = "windows")]
         unsafe {
-            use tao::platform::windows::WindowExtWindows;
-            menu.init_for_hwnd(window.hwnd());
+            use winit::platform::windows::WindowExtWindows;
+            use wry::raw_window_handle::HasWindowHandle;
+            match window.window_handle().unwrap().as_raw() {
+                wry::raw_window_handle::RawWindowHandle::Win32(win32_window_handle) => {
+                    menu.init_for_hwnd(win32_window_handle.hwnd.into());
+                }
+                _ => unreachable!(),
+            }
         }
 
         #[cfg(target_os = "linux")]
         {
-            use tao::platform::unix::WindowExtUnix;
+            use winit::platform::unix::WindowExtUnix;
             menu.init_for_gtk_window(window.gtk_window(), window.default_vbox())
                 .unwrap();
         }
 
         #[cfg(target_os = "macos")]
         {
-            use tao::platform::macos::WindowExtMacOS;
+            use winit::platform::macos::WindowExtMacOS;
             menu.init_for_nsapp();
         }
     }

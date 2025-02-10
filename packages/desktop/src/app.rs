@@ -11,13 +11,14 @@ use dioxus_core::VirtualDom;
 use std::{
     cell::{Cell, RefCell},
     collections::HashMap,
+    ptr,
     rc::Rc,
     time::Duration,
 };
-use tao::{
+use winit::{
     dpi::PhysicalSize,
     event::Event,
-    event_loop::{ControlFlow, EventLoop, EventLoopBuilder, EventLoopProxy, EventLoopWindowTarget},
+    event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopBuilder, EventLoopProxy},
     window::WindowId,
 };
 
@@ -49,16 +50,17 @@ pub(crate) struct SharedContext {
     pub(crate) pending_webviews: RefCell<Vec<PendingWebview>>,
     pub(crate) shortcut_manager: ShortcutRegistry,
     pub(crate) proxy: EventLoopProxy<UserWindowEvent>,
-    pub(crate) target: EventLoopWindowTarget<UserWindowEvent>,
+    pub(crate) event_loop: RefCell<Option<*const ActiveEventLoop>>,
     pub(crate) websocket: EditWebsocket,
 }
 
 impl App {
     pub fn new(mut cfg: Config, virtual_dom: VirtualDom) -> (EventLoop<UserWindowEvent>, Self) {
-        let event_loop = cfg
-            .event_loop
-            .take()
-            .unwrap_or_else(|| EventLoopBuilder::<UserWindowEvent>::with_user_event().build());
+        let event_loop = cfg.event_loop.take().unwrap_or_else(|| {
+            EventLoop::<UserWindowEvent>::with_user_event()
+                .build()
+                .unwrap()
+        });
 
         let app = Self {
             exit_on_last_window_close: cfg.exit_on_last_window_close,
@@ -75,7 +77,7 @@ impl App {
                 pending_webviews: Default::default(),
                 shortcut_manager: ShortcutRegistry::new(),
                 proxy: event_loop.create_proxy(),
-                target: event_loop.clone(),
+                event_loop: RefCell::new(None),
                 websocket: EditWebsocket::start(),
             }),
         };
@@ -109,11 +111,14 @@ impl App {
         (event_loop, app)
     }
 
-    pub fn tick(&mut self, window_event: &Event<'_, UserWindowEvent>) {
+    pub fn tick(&mut self, window_event: &Event<UserWindowEvent>, event_loop: &ActiveEventLoop) {
         self.control_flow = ControlFlow::Wait;
+
+        *self.shared.event_loop.borrow_mut() = Some(&*event_loop);
+
         self.shared
             .event_handlers
-            .apply_event(window_event, &self.shared.target);
+            .apply_event(window_event, event_loop);
     }
 
     #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
@@ -126,10 +131,12 @@ impl App {
         match event.id().0.as_str() {
             "dioxus-float-top" => {
                 for webview in self.webviews.values() {
-                    webview
-                        .desktop_context
-                        .window
-                        .set_always_on_top(self.float_all);
+                    // TODO
+                    let window = &webview.desktop_context.window;
+                    if self.float_all {
+                        window.focus_window();
+                    } else {
+                    }
                 }
                 self.float_all = !self.float_all;
             }
@@ -165,7 +172,7 @@ impl App {
             if button == tray_icon::MouseButton::Left {
                 for webview in self.webviews.values() {
                     webview.desktop_context.window.set_visible(true);
-                    webview.desktop_context.window.set_focus();
+                    webview.desktop_context.window.focus_window();
                 }
             }
         }
@@ -188,7 +195,7 @@ impl App {
         }
     }
 
-    pub fn handle_close_requested(&mut self, id: WindowId) {
+    pub fn handle_close_requested(&mut self, id: WindowId, event_loop: &ActiveEventLoop) {
         let Some(window) = self.webviews.get(&id) else {
             // If the window is not found, we can just return
             return;
@@ -209,17 +216,19 @@ impl App {
                 self.webviews.remove(&id);
 
                 if self.exit_on_last_window_close && self.webviews.is_empty() {
-                    self.control_flow = ControlFlow::Exit
+                    // self.control_flow = ControlFlow::Exit
+                    event_loop.exit();
                 }
             }
         };
     }
 
-    pub fn window_destroyed(&mut self, id: WindowId) {
+    pub fn window_destroyed(&mut self, id: WindowId, event_loop: &ActiveEventLoop) {
         self.webviews.remove(&id);
 
         if self.exit_on_last_window_close && self.webviews.is_empty() {
-            self.control_flow = ControlFlow::Exit
+            // self.control_flow = ControlFlow::Exit
+            event_loop.exit();
         }
     }
 
@@ -240,7 +249,7 @@ impl App {
         }
     }
 
-    pub fn handle_start_cause_init(&mut self) {
+    pub fn handle_start_cause_init(&mut self, _event_loop: &ActiveEventLoop) {
         let virtual_dom = self
             .unmounted_dom
             .take()
@@ -251,13 +260,15 @@ impl App {
             .take()
             .expect("Config should be set before initialization");
 
-        self.is_visible_before_start = cfg.window.window.visible;
-        #[cfg(not(target_os = "linux"))]
+        self.is_visible_before_start = cfg.window.visible;
+        
+        #[cfg(not(target_os = "linux"))] 
         {
-            cfg.window = cfg.window.with_visible(false);
+        cfg.window = cfg.window.with_visible(false);            
         }
-        let explicit_window_size = cfg.window.window.inner_size;
-        let explicit_window_position = cfg.window.window.position;
+
+        let explicit_window_size = cfg.window.inner_size;
+        let explicit_window_position = cfg.window.position;
 
         let webview = WebviewInstance::new(cfg, virtual_dom, self.shared.clone());
 
@@ -315,7 +326,7 @@ impl App {
     }
 
     #[cfg(all(feature = "devtools", debug_assertions))]
-    pub fn handle_hot_reload_msg(&mut self, msg: dioxus_devtools::DevserverMsg) {
+    pub fn handle_hot_reload_msg(&mut self, msg: dioxus_devtools::DevserverMsg, event_loop: &ActiveEventLoop) {
         use std::time::Duration;
 
         use dioxus_devtools::DevserverMsg;
@@ -387,7 +398,8 @@ impl App {
                 false,
             ),
             DevserverMsg::Shutdown => {
-                self.control_flow = ControlFlow::Exit;
+                // self.control_flow = ControlFlow::Exit;
+                event_loop.exit();
             }
             _ => {}
         }
@@ -535,8 +547,8 @@ impl App {
     fn resume_from_state(
         &mut self,
         webview: &WebviewInstance,
-        explicit_inner_size: Option<tao::dpi::Size>,
-        explicit_window_position: Option<tao::dpi::Position>,
+        explicit_inner_size: Option<winit::dpi::Size>,
+        explicit_window_position: Option<winit::dpi::Position>,
     ) {
         // We only want to do this on desktop
         if cfg!(target_os = "android") || cfg!(target_os = "ios") {
@@ -557,11 +569,11 @@ impl App {
                 // Only set the outer position if it wasn't explicitly set
                 if explicit_window_position.is_none() {
                     if cfg!(target_os = "macos") {
-                        window.set_outer_position(tao::dpi::LogicalPosition::new(
+                        window.set_outer_position(winit::dpi::LogicalPosition::new(
                             position.0, position.1,
                         ));
                     } else {
-                        window.set_outer_position(tao::dpi::PhysicalPosition::new(
+                        window.set_outer_position(winit::dpi::PhysicalPosition::new(
                             position.0, position.1,
                         ));
                     }
@@ -570,9 +582,11 @@ impl App {
                 // Only set the inner size if it wasn't explicitly set
                 if explicit_inner_size.is_none() {
                     if cfg!(target_os = "macos") {
-                        window.set_inner_size(tao::dpi::LogicalSize::new(size.0, size.1));
+                        // window.set_inner_size(winit::dpi::LogicalSize::new(size.0, size.1));
+                        let _ = window.request_inner_size(winit::dpi::LogicalSize::new(size.0, size.1));
                     } else {
-                        window.set_inner_size(tao::dpi::PhysicalSize::new(size.0, size.1));
+                        let _ = window.request_inner_size(winit::dpi::PhysicalSize::new(size.0, size.1));
+                        // window.set_inner_size();
                     }
                 }
             }
