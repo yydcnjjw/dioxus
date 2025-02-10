@@ -1,8 +1,11 @@
+use std::{any::Any, sync::Arc};
+
 use serde::{Deserialize, Serialize};
-use tao::window::WindowId;
+use winit::window::WindowId;
 
 #[non_exhaustive]
 #[derive(Debug, Clone)]
+#[allow(missing_docs)]
 pub enum UserWindowEvent {
     /// A global hotkey event
     #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
@@ -43,6 +46,9 @@ pub enum UserWindowEvent {
 
     /// Gracefully shutdown the entire app
     Shutdown,
+
+    /// Wake up event loop
+    WakeUp,
 }
 
 /// A message struct that manages the communication between the webview and the eventloop code

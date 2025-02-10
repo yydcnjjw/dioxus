@@ -15,7 +15,7 @@ pub extern "C" fn start_app() {
     use dioxus_core::{Element, VirtualDom};
     use std::any::Any;
 
-    tao::android_binding!(dev_dioxus, main, WryActivity, wry::android_setup, root, tao);
+    // winit::android_binding!(dev_dioxus, main, WryActivity, wry::android_setup, root, tao);
     wry::android_binding!(dev_dioxus, main, wry);
 
     #[cfg(target_os = "android")]
@@ -63,3 +63,4 @@ pub extern "C" fn start_app() {
         });
     }
 }
+

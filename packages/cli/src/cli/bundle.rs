@@ -5,6 +5,11 @@ use anyhow::Context;
 use path_absolutize::Absolutize;
 use std::path::PathBuf;
 use target_lexicon::Triple;
+use std::collections::HashMap;
+use target_lexicon::OperatingSystem;
+use tauri_bundler::{BundleBinary, BundleSettings, PackageSettings, SettingsBuilder};
+
+use walkdir::WalkDir;
 
 use super::*;
 
@@ -158,7 +163,7 @@ impl Bundle {
             _ = std::fs::remove_dir_all(krate.bundle_dir(build.bundle));
 
             let mut name: PathBuf = krate.executable_name().into();
-            if cfg!(windows) {
+            if matches!(build.triple.operating_system, OperatingSystem::Windows) {
                 name.set_extension("exe");
             }
             std::fs::create_dir_all(krate.bundle_dir(build.bundle))

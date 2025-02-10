@@ -19,7 +19,7 @@ use crate::window;
 use dioxus_html::input_data::keyboard_types::Modifiers;
 use slab::Slab;
 use std::{cell::RefCell, collections::HashMap, rc::Rc, str::FromStr};
-use tao::keyboard::ModifiersState;
+use winit::keyboard::ModifiersState;
 
 /// An global id for a shortcut.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -297,7 +297,7 @@ impl IntoKeyCode for dioxus_html::KeyCode {
             dioxus_html::KeyCode::BackSlash => Code::Backslash,
             dioxus_html::KeyCode::CloseBracket => Code::BracketRight,
             dioxus_html::KeyCode::SingleQuote => Code::Quote,
-            key => panic!("Failed to convert {key:?} to tao::keyboard::KeyCode, try using tao::keyboard::KeyCode directly"),
+            key => panic!("Failed to convert {key:?} to winit::keyboard::KeyCode, try using tao::keyboard::KeyCode directly"),
         }
     }
 }

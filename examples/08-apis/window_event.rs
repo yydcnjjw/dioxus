@@ -7,7 +7,7 @@
 //! - toggle window decorations
 //! - change the window title
 //!
-//! The entire featuresuite of wry and tao is available to you
+//! The entire featuresuite of wry and winit is available to you
 
 use dioxus::desktop::{Config, WindowBuilder, window};
 use dioxus::prelude::*;

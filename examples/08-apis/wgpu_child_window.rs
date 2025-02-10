@@ -5,11 +5,11 @@
 //!
 //! To use this feature set `with_as_child_window()` on your desktop config which will then let you
 
-use dioxus::prelude::*;
-use dioxus::{
-    desktop::tao::{event::Event as WryEvent, window::Window},
-    desktop::{Config, tao::window::WindowBuilder, use_wry_event_handler, window},
+use dioxus::desktop::{
+    Config, DesktopContext, use_wry_event_handler, window,
+    winit::{event::Event as WryEvent, window::WindowBuilder},
 };
+use dioxus::prelude::*;
 use std::sync::Arc;
 
 fn main() {
@@ -47,7 +47,7 @@ fn app() -> Element {
     });
 
     use_wry_event_handler(move |event, _| {
-        use dioxus::desktop::tao::event::WindowEvent;
+        use dioxus::desktop::winit::event::WindowEvent;
 
         if let WryEvent::WindowEvent {
             event: WindowEvent::Resized(new_size),
